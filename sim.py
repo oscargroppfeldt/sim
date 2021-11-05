@@ -122,6 +122,20 @@ def plot(sy, sp, sr, phi, theta):
     print("final: ", finQ)
     print("rot: ", rotQ)
 
+
+    q_0 = Quat(0,-1,0,0)
+    q_1 = Quat(0,0,1/np.sqrt(2),-1/np.sqrt(2))
+    t0 = time.time()
+    val_list = q_0.Slerp(q_1,100)
+    t1 = time.time()
+    print("TID TAGEN FÖR SLERP: ", t1-t0)
+
+    for element in val_list:
+        vec = [element.b,element.c,element.d]
+        ax.quiver(0,0,0,
+        VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
+
+
     # Gränsvärden: när q1q2 + q0q3 beräknas yaw och roll annorlunda. Detta syns nedan:
     # Detta är fel, det blir annorlunda för vårt system. Se länken nedan för hur de kom fram till gränsvärdena.
     pole = rotQ[1]*rotQ[1] + rotQ[2]*rotQ[2]
@@ -293,6 +307,7 @@ def test_crop(phi, theta):
     print("a = ", a, "b = ", b, "c = ", c, "t = ", t)
     print("x = ", a*t, "\ny = ", -b*t)
 
+
 class Quat:
     def __init__(self, a, b, c, d):
         self.a = a
@@ -324,11 +339,11 @@ class Quat:
 
     def inv(self):
         norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c + self.d*self.d)
-        self.a = self.a/norm
-        self.b = -self.b/norm
-        self.c = -self.c/norm
-        self.d = -self.d/norm
-        return self
+        temp_a = self.a/norm
+        temp_b = -self.b/norm
+        temp_c = -self.c/norm
+        temp_d = -self.d/norm
+        return Quat(temp_a, temp_b, temp_c, temp_d)
 
     def toEuler(self):
         temp_yaw = np.arctan2(2*(self.c*self.d+ self.a*self.b),
@@ -341,11 +356,11 @@ class Quat:
 
     def Slerp(self, q_end, step=10):
         res_lst = []
-        for t in range(step):
-            q_new = self*(self.inv()*q_end)
-            q_new_pow = q_new.pow(t/step)
-            print(t/step)
-            res_lst.append(str(q_new_pow))
+        for t in range(step+1):
+            newQuat = Quat(0,0,0,0)
+            newQuat = self.inv()*q_end
+            QuatPow = self*newQuat.qexp(t/step)
+            res_lst.append(QuatPow)
 
         return res_lst
 
@@ -371,18 +386,29 @@ class Quat:
 
     
     def pow(self, power):
-        return self.exp(power*self.qlog())
+        self = self.exp(power*self.qlog())
+        return self
+
+    def qexp(self, power):
+        norm = np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
+        angle = np.arccos(self.a/norm)
+
+        temp_a = np.cos(angle*power)*norm**power
+
+        vec_factor = np.sin(angle*power)*norm**power
+
+        temp_b = self.b*vec_factor
+        temp_c = self.c*vec_factor
+        temp_d = self.d*vec_factor
+
+        return Quat(temp_a, temp_b, temp_c, temp_d)
 
 
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])
 
-def main():
-    q1 = Quat(0,1,0,0)
-    q2 = Quat(0,0,1,0)
-    t0 = time.time()
-    print(q1.Slerp(q2,5))
-    t1 = time.time()
-    print(t1-t0)
 
-main()
+
+
+if __name__ == "__main__":
+    plot(0,0,0,0,0)
