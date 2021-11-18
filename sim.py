@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib import colors
-import time
+from matplotlib.patches import Rectangle
+import random
 
 
 SIZE = 80
@@ -123,17 +124,20 @@ def plot(sy, sp, sr, phi, theta):
     print("rot: ", rotQ)
 
 
-    q_0 = Quat(0,-1,0,0)
-    q_1 = Quat(0,0,1/np.sqrt(2),-1/np.sqrt(2))
-    t0 = time.time()
-    val_list = q_0.Slerp(q_1,100)
-    t1 = time.time()
-    print("TID TAGEN FÖR SLERP: ", t1-t0)
+    q_start = Quat(0,1,0,0)
+    q_end = Quat(0,0,1,0)
+    q_start.norm()
+    q_end.norm()
+    q_start.slerpSteps(q_end)
 
-    for element in val_list:
+    lst = q_start.Slerp(q_end)
+
+
+    for element in lst:
         vec = [element.b,element.c,element.d]
         ax.quiver(0,0,0,
         VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
+        print(vec)
 
 
     # Gränsvärden: när q1q2 + q0q3 beräknas yaw och roll annorlunda. Detta syns nedan:
@@ -160,7 +164,7 @@ def plot(sy, sp, sr, phi, theta):
     pitch = np.arctan2(2*(rotQ[0]*rotQ[1] + rotQ[2]*rotQ[3]), 1 - 2*(rotQ[1]*rotQ[1] + rotQ[2]*rotQ[2]))
     
     print("roll: ", np.rad2deg(roll), ", pitch: ", np.rad2deg(pitch), ", yaw: ", np.rad2deg(yaw))
-
+    """
     ax.quiver(0, 0, 0,
     VIEW_SIZE*(finQ[1]/normF), VIEW_SIZE*(finQ[2]/normF), VIEW_SIZE*(finQ[3]/normF), color="g")
     ax.quiver(0, 0, 0,
@@ -169,6 +173,7 @@ def plot(sy, sp, sr, phi, theta):
     2*VIEW_SIZE*(rotQ[1]/normR), 2*VIEW_SIZE*(rotQ[2]/normR), 2*VIEW_SIZE*(rotQ[3]/normR), color="r")
     ax.quiver(0, 0, 0,
     -2*VIEW_SIZE*(rotQ[1]/normR), -2*VIEW_SIZE*(rotQ[2]/normR), -2*VIEW_SIZE*(rotQ[3]/normR), color="r")
+    """
     plt.show()
     
 
@@ -337,6 +342,13 @@ class Quat:
         new_d = self.d + other.d
         return Quat(new_a, new_b, new_c, new_d)
 
+    def norm(self):
+        norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c+ self.d*self.d)
+        self.a = self.a/norm
+        self.b = self.b/norm
+        self.c = self.c/norm
+        self.d = self.d/norm
+
     def inv(self):
         norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c + self.d*self.d)
         temp_a = self.a/norm
@@ -344,6 +356,9 @@ class Quat:
         temp_c = -self.c/norm
         temp_d = -self.d/norm
         return Quat(temp_a, temp_b, temp_c, temp_d)
+
+    def copy(self):
+        return Quat(self.a, self.b, self.c, self.d)
 
     def toEuler(self):
         temp_yaw = np.arctan2(2*(self.c*self.d+ self.a*self.b),
@@ -356,12 +371,14 @@ class Quat:
 
     def Slerp(self, q_end, step=10):
         res_lst = []
+        q0 = self.copy()
+        q0_inv = q0.inv()
+        q1 = q_end
+        q_pow = q0_inv*q1
         for t in range(step+1):
-            newQuat = Quat(0,0,0,0)
-            newQuat = self.inv()*q_end
-            QuatPow = self*newQuat.qexp(t/step)
-            res_lst.append(QuatPow)
-
+            q_temp = q_pow.qexp(t/step)
+            q_res = q0*q_temp
+            res_lst.append(q_res)
         return res_lst
 
     def exp(self, pot):
@@ -389,6 +406,19 @@ class Quat:
         self = self.exp(power*self.qlog())
         return self
 
+    def vecNorm(self):
+        return np.sqrt(self.b*self.b + self.c*self.c + self.d*self.d)
+    
+    def slerpSteps(this, q_end):
+    # Needs calibration
+
+        q_used = q_end.copy().inv()
+        arg = (this*q_used).vecNorm()
+        theta = 2*np.arcsin(arg)
+        print(f"Arg: {arg}, theta: {theta}")
+        steps = 10*theta/np.pi
+        print(f"Suggested num. of steps: {steps}")
+
     def qexp(self, power):
         norm = np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
         angle = np.arccos(self.a/norm)
@@ -402,7 +432,6 @@ class Quat:
         temp_d = self.d*vec_factor
 
         return Quat(temp_a, temp_b, temp_c, temp_d)
-
 
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])
