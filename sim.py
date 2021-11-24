@@ -124,8 +124,8 @@ def plot(sy, sp, sr, phi, theta):
     print("rot: ", rotQ)
 
 
-    q_start = Quat(0,1,0,0)
-    q_end = Quat(0,0,1,0)
+    q_start = Quat(0,0,0,1)
+    q_end = Quat(0,0,0,-1)
     q_start.norm()
     q_end.norm()
     q_start.slerpSteps(q_end)
@@ -137,7 +137,7 @@ def plot(sy, sp, sr, phi, theta):
         vec = [element.b,element.c,element.d]
         ax.quiver(0,0,0,
         VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
-        print(vec)
+        print(vec, element.a)
 
 
     # Gränsvärden: när q1q2 + q0q3 beräknas yaw och roll annorlunda. Detta syns nedan:
