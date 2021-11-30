@@ -124,13 +124,14 @@ def plot(sy, sp, sr, phi, theta):
     print("rot: ", rotQ)
 
 
-    q_start = Quat(0,0,0,1)
-    q_end = Quat(0,0,0,-1)
+    q_start = Quat(0,1,0,0)
+    q_end = Quat(0,-1,1,0)
+    lst = []
     q_start.norm()
     q_end.norm()
-    q_start.slerpSteps(q_end)
-
-    lst = q_start.Slerp(q_end)
+    steps = q_start.slerpSteps(q_end)
+    for t in range(steps):
+        lst.append(q_start.Slerp(q_end,t ,steps))
 
 
     for element in lst:
@@ -369,17 +370,16 @@ class Quat:
 
         return [temp_yaw, temp_pitch, temp_roll]
 
-    def Slerp(self, q_end, step=10):
-        res_lst = []
+    def Slerp(self, q_end, t, step=10):
         q0 = self.copy()
         q0_inv = q0.inv()
         q1 = q_end
         q_pow = q0_inv*q1
-        for t in range(step+1):
-            q_temp = q_pow.qexp(t/step)
-            q_res = q0*q_temp
-            res_lst.append(q_res)
-        return res_lst
+        print(f"Pow norm: {q_pow.a*q_pow.a+q_pow.b*q_pow.b+q_pow.c*q_pow.c+q_pow.d*q_pow.d}")    
+        q_temp = q_pow.qexp(t/step)
+        q_res = q0*q_temp
+        print(f"After mult give norm {q_res.a*q_res.a+q_res.b*q_res.b+q_res.c*q_res.c+q_res.d*q_res.d}")
+        return q_res
 
     def exp(self, pot):
         vec_size = np.sqrt(self.b*self.b + self.c*self.c + self.d*self.d)
@@ -415,14 +415,15 @@ class Quat:
         q_used = q_end.copy().inv()
         arg = (this*q_used).vecNorm()
         theta = 2*np.arcsin(arg)
-        print(f"Arg: {arg}, theta: {theta}")
+        #print(f"Arg: {arg}, theta: {theta}")
         steps = 10*theta/np.pi
-        print(f"Suggested num. of steps: {steps}")
+        #print(f"Suggested num. of steps: {steps}")
+        return int(steps)
 
     def qexp(self, power):
         norm = np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
         angle = np.arccos(self.a/norm)
-
+        print(f"qexp calculated a norm of {norm} with the argument {angle}")
         temp_a = np.cos(angle*power)*norm**power
 
         vec_factor = np.sin(angle*power)*norm**power
@@ -430,8 +431,10 @@ class Quat:
         temp_b = self.b*vec_factor
         temp_c = self.c*vec_factor
         temp_d = self.d*vec_factor
-
-        return Quat(temp_a, temp_b, temp_c, temp_d)
+        q = Quat(temp_a, temp_b, temp_c, temp_d)
+        q_norm = q.a*q.a+q.b*q.b+q.c*q.c+q.d*q.d
+        print(f"New norm is now: {q_norm}")
+        return q
 
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])
