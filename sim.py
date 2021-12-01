@@ -125,7 +125,7 @@ def plot(sy, sp, sr, phi, theta):
 
 
     q_start = Quat(0,1,0,0)
-    q_end = Quat(0,-0.9,-0.1,0)
+    q_end = Quat(0,0,1,0)
     lst = []
     q_start.norm()
     q_end.norm()
@@ -412,14 +412,16 @@ class Quat:
     def normVal(self):
         return np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
     
-    def slerpSteps(this, q_end):
+    def slerpSteps(self, q_end):
     # Needs calibration
 
-        q_used = q_end.copy().inv()
-        arg = (this*q_used).vecNorm()
-        theta = np.arcsin(arg)
-        steps = 10*theta
-        print(theta, steps)
+        dot = self.a*q_end.a + self.b*q_end.b + self.c*q_end.c + self.d*q_end.d
+
+        ang = np.arccos(dot)
+
+        steps = ang/np.pi * 10
+
+        print(ang, steps)
         return int(steps)
 
     def qexp(self, power):
