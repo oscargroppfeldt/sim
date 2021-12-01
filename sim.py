@@ -125,20 +125,21 @@ def plot(sy, sp, sr, phi, theta):
 
 
     q_start = Quat(0,1,0,0)
-    q_end = Quat(0,-1,1,0)
+    q_end = Quat(0,-0.9,-0.1,0)
     lst = []
     q_start.norm()
     q_end.norm()
     steps = q_start.slerpSteps(q_end)
-    for t in range(steps):
-        lst.append(q_start.Slerp(q_end,t ,steps))
+    for t in np.linspace(0,1,steps):
+        lst.append(q_start.newSlerp(q_end, t))
 
+    lst.append(q_end)
+    lst.insert(0, q_start)
 
     for element in lst:
         vec = [element.b,element.c,element.d]
         ax.quiver(0,0,0,
         VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
-        print(vec, element.a)
 
 
     # Gränsvärden: när q1q2 + q0q3 beräknas yaw och roll annorlunda. Detta syns nedan:
@@ -370,15 +371,14 @@ class Quat:
 
         return [temp_yaw, temp_pitch, temp_roll]
 
-    def Slerp(self, q_end, t, step=10):
+    def Slerp(self, q_end, t, step):
         q0 = self.copy()
         q0_inv = q0.inv()
         q1 = q_end
-        q_pow = q0_inv*q1
-        print(f"Pow norm: {q_pow.a*q_pow.a+q_pow.b*q_pow.b+q_pow.c*q_pow.c+q_pow.d*q_pow.d}")    
+        q_pow = q1*q0_inv
         q_temp = q_pow.qexp(t/step)
-        q_res = q0*q_temp
-        print(f"After mult give norm {q_res.a*q_res.a+q_res.b*q_res.b+q_res.c*q_res.c+q_res.d*q_res.d}")
+        q_res = q_temp*q0
+        q_res.norm()
         return q_res
 
     def exp(self, pot):
@@ -408,33 +408,45 @@ class Quat:
 
     def vecNorm(self):
         return np.sqrt(self.b*self.b + self.c*self.c + self.d*self.d)
+
+    def normVal(self):
+        return np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
     
     def slerpSteps(this, q_end):
     # Needs calibration
 
         q_used = q_end.copy().inv()
         arg = (this*q_used).vecNorm()
-        theta = 2*np.arcsin(arg)
-        #print(f"Arg: {arg}, theta: {theta}")
-        steps = 10*theta/np.pi
-        #print(f"Suggested num. of steps: {steps}")
+        theta = np.arcsin(arg)
+        steps = 10*theta
+        print(theta, steps)
         return int(steps)
 
     def qexp(self, power):
-        norm = np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
+        norm = self.normVal()
         angle = np.arccos(self.a/norm)
-        print(f"qexp calculated a norm of {norm} with the argument {angle}")
         temp_a = np.cos(angle*power)*norm**power
-
+        
         vec_factor = np.sin(angle*power)*norm**power
 
         temp_b = self.b*vec_factor
         temp_c = self.c*vec_factor
         temp_d = self.d*vec_factor
         q = Quat(temp_a, temp_b, temp_c, temp_d)
-        q_norm = q.a*q.a+q.b*q.b+q.c*q.c+q.d*q.d
-        print(f"New norm is now: {q_norm}")
         return q
+
+
+    def newSlerp(self, q_end, per):
+        dot = self.a*q_end.a + self.b*q_end.b + self.c*q_end.c + self.d*q_end.d
+
+        theta = np.arccos(dot)*per
+        
+        q_res = Quat(q_end.a - self.a*dot, q_end.b - self.b*dot, q_end.c - self.c*dot, q_end.d - self.d*dot)
+
+        q_res.norm()
+
+        return(Quat(self.a*np.cos(theta),self.b*np.cos(theta),self.c*np.cos(theta),self.d*np.cos(theta)) + 
+                    Quat(q_res.a*np.sin(theta), q_res.b*np.sin(theta), q_res.c*np.sin(theta), q_res.d*np.sin(theta)))
 
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])
