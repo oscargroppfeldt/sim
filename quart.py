@@ -96,6 +96,59 @@ class Quat:
 
         return Quat(temp_a, temp_b, temp_c, temp_d)
 
+   
+    def pow(self, power):
+        self = self.exp(power*self.qlog())
+        return self
+
+    def vecNorm(self):
+        return np.sqrt(self.b*self.b + self.c*self.c + self.d*self.d)
+
+    def normVal(self):
+        return np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
+    
+    def slerpSteps(self, q_end):
+    # Needs calibration
+
+        dot = self.a*q_end.a + self.b*q_end.b + self.c*q_end.c + self.d*q_end.d
+
+        ang = np.arccos(dot)
+
+        steps = ang/np.pi * 10
+
+        print(ang, steps)
+        return int(steps)
+
+    def qexp(self, power):
+        norm = self.normVal()
+        angle = np.arccos(self.a/norm)
+        temp_a = np.cos(angle*power)*norm**power
+        
+        vec_factor = np.sin(angle*power)*norm**power
+
+        temp_b = self.b*vec_factor
+        temp_c = self.c*vec_factor
+        temp_d = self.d*vec_factor
+        q = Quat(temp_a, temp_b, temp_c, temp_d)
+        return q
+
+
+    def newSlerp(self, q_end, per):
+        dot = self.a*q_end.a + self.b*q_end.b + self.c*q_end.c + self.d*q_end.d
+
+        print(dot)
+
+        theta = np.arccos(dot)*per
+        
+        q_res = Quat(q_end.a - self.a*dot, q_end.b - self.b*dot, q_end.c - self.c*dot, q_end.d - self.d*dot)
+
+        q_res.norm()
+
+        return(Quat(self.a*np.cos(theta),self.b*np.cos(theta),self.c*np.cos(theta),self.d*np.cos(theta)) + 
+                    Quat(q_res.a*np.sin(theta), q_res.b*np.sin(theta), q_res.c*np.sin(theta), q_res.d*np.sin(theta)))
+
+
+
 
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])

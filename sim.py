@@ -124,8 +124,8 @@ def plot(sy, sp, sr, phi, theta):
     print("rot: ", rotQ)
 
 
-    q_start = Quat(0,1,0,0)
-    q_end = Quat(0,0,1,0)
+    q_start = Quat(0,1,0,-1)
+    q_end = Quat(0,-1,1,0)
     lst = []
     q_start.norm()
     q_end.norm()
@@ -440,6 +440,8 @@ class Quat:
 
     def newSlerp(self, q_end, per):
         dot = self.a*q_end.a + self.b*q_end.b + self.c*q_end.c + self.d*q_end.d
+
+        print(dot)
 
         theta = np.arccos(dot)*per
         
