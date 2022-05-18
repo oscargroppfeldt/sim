@@ -209,8 +209,8 @@ def sysNormal(rotMatrix):
     return rotMatrix.dot(np.array([[0], [0], [1]]))
 
 def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
-    theta = np.arctan2(q.y, q.x)
-    phi = np.arcsin(-q.z)
+    theta = np.arctan2(q.c, q.b)
+    phi = np.arcsin(-q.d)
     scaleH = 1 + (1/(hFOV - (np.pi / 2)))*(phi - hFOV)
     scaleW = 1 + (1/(wFOV - (np.pi / 2)))*(phi - wFOV)
     return (imgW/2 + (imgW/2)*np.sin(theta)*(scaleW), imgH/2 - (imgH/2)*np.cos(theta)*(scaleH))
@@ -235,10 +235,12 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     rotQinv = rotQ.inv()
 
     finQ = rotQ * oriQ * rotQinv
+    finQ *= 1 / (finQ.vecNorm())
     crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
     print("Gimbal yaw, pitch:       ", gimbal_y, ",", gimbal_p)
     print("Aim yaw, pitch           ", aim_y, ",", aim_p)
     print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
+    print("Cropping point x, y:     ", crop[0], crop[1])
 
 
 class Quat:
@@ -398,4 +400,9 @@ class Quat:
 
 
 if __name__ == "__main__":
-    plot(0,0,0,0,0)
+    while(1):
+        gimbal_y, gimbal_p = input("Enter gimbal **yaw pitch**")
+        aim_y, aim_p = input("Enter aim **yaw pitch**")
+        system_y, system_p, system_r = input("Enter system **yaw pitch roll**")
+
+        test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
