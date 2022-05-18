@@ -223,19 +223,27 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
 
     camQ = Quat()
     camQ.fromEuler(cam_y, cam_p, 0)
+    camQ.norm()
     camQ.con()
     gimQ = Quat()
     gimQ.fromEuler(gimbal_y, gimbal_p, 0)
+    gimQ.norm()
     gimQ.con()
     sysQ = Quat()
     sysQ.fromEuler(sys_y, sys_p, sys_r)
+    sysQ.norm()
     sysQ.con()
     aimQ = Quat()
     aimQ.fromEuler(aim_y, aim_p, 0)
+    aimQ.norm()
     
     # Might need to normalize??
-
-    rotQ = camQ * gimQ * sysQ * aimQ
+    """
+    g s c a
+    c g s a
+    g c s a
+    """
+    rotQ = gimQ * camQ * sysQ * aimQ
 
     finQ = rotQ * oriQ
     rotQ.con()
@@ -243,6 +251,7 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
 
     finQ *= 1 / (finQ.vecNorm())
     crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
+    print("rotQ length:             ", rotQ.normVal())
     print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
     print("Aim yaw, pitch           ", aim_y, aim_p)
     print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
@@ -439,3 +448,5 @@ def main():
         system_r *= DEG2RAD
 
         test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
+
+main()
