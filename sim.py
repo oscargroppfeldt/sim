@@ -102,7 +102,7 @@ def plot(sy, sp, sr, phi, theta, gimQ, camQ, sysQ, aimQ):
     aim_final = Raim.dot(aim)
     ax.scatter(VIEW_SIZE*aim_final.item(0), VIEW_SIZE*aim_final.item(1), VIEW_SIZE*aim_final.item(2), marker = 'x')
 
-    # Plot aim vector from quaternion
+    # Plot aim vector from  fet snopp
 
     
     lst = []
