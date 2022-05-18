@@ -209,7 +209,7 @@ def sysNormal(rotMatrix):
     return rotMatrix.dot(np.array([[0], [0], [1]]))
 
 def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
-    theta = np.arctan2(q.c, q.b)
+    theta = np.arctan2(q.b, q.c)
     phi = np.arcsin(-q.d)
     scaleH = 1 + (1/(hFOV - (np.pi / 2)))*(phi - hFOV)
     scaleW = 1 + (1/(wFOV - (np.pi / 2)))*(phi - wFOV)
@@ -221,37 +221,43 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
 
     oriQ = Quat(0, 0, 1, 0)
 
-    camQ = Quat(cam_y, cam_p, 0)
-    camQ.inv()
-    gimQ = Quat(gimbal_y, gimbal_p, 0)
-    gimQ.inv()
-    sysQ = Quat(sys_y, sys_p, sys_r)
-    sysQ.inv()
-    aimQ = Quat(aim_y, aim_p, 0)
+    camQ = Quat()
+    camQ.fromEuler(cam_y, cam_p, 0)
+    camQ.con()
+    gimQ = Quat()
+    gimQ.fromEuler(gimbal_y, gimbal_p, 0)
+    gimQ.con()
+    sysQ = Quat()
+    sysQ.fromEuler(sys_y, sys_p, sys_r)
+    sysQ.con()
+    aimQ = Quat()
+    aimQ.fromEuler(aim_y, aim_p, 0)
     
     # Might need to normalize??
 
     rotQ = camQ * gimQ * sysQ * aimQ
-    rotQinv = rotQ.inv()
 
-    finQ = rotQ * oriQ * rotQinv
+    finQ = rotQ * oriQ
+    rotQ.con()
+    finQ = finQ * rotQ
+
     finQ *= 1 / (finQ.vecNorm())
     crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
-    print("Gimbal yaw, pitch:       ", gimbal_y, ",", gimbal_p)
-    print("Aim yaw, pitch           ", aim_y, ",", aim_p)
+    print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
+    print("Aim yaw, pitch           ", aim_y, aim_p)
     print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
     print("Cropping point x, y:     ", crop[0], crop[1])
 
 
 class Quat:
-    def __init__(self, a, b, c, d):
+    def __init__(self, a = 1, b = 0, c = 0, d = 0):
         self.a = a
         self.b = b
         self.c = c
         self.d = d
         self.vec = [b,c,d]
 
-    def __init__(self, yaw, pitch, roll):
+    def fromEuler(self, yaw, pitch, roll):
         cy = np.cos(yaw/2)
         sy = np.sin(yaw/2)
         cp = np.cos(pitch/2)
@@ -265,10 +271,16 @@ class Quat:
         self.d = cy*sp*sr - sy*cp*cr
     
     def __mul__(self, other):
+        """
+        w*q.w - x*q.x - y*q.y - z*q.z,
+        x*q.w + w*q.x - z*q.y + y*q.z,
+        y*q.w + z*q.x + w*q.y - x*q.z,
+        z*q.w - y*q.x + x*q.y + w*q.z
+        """
         new_a = self.a*other.a - self.b*other.b - self.c*other.c - self.d*other.d
-        new_b = self.a*other.b + self.b*other.a + self.c*other.d - self.d*other.c
-        new_c = self.a*other.c - self.b*other.d + self.c*other.a + self.d*other.b
-        new_d = self.a*other.d + self.b*other.c - self.c*other.b + self.d*other.a
+        new_b = self.b*other.a + self.a*other.b - self.d*other.c + self.c*other.d
+        new_c = self.c*other.a + self.d*other.b + self.a*other.c - self.b*other.d
+        new_d = self.d*other.a - self.c*other.b + self.b*other.c + self.a*other.d
         return Quat(new_a, new_b, new_c, new_d)
 
     def __rmul__(self, other):
@@ -277,6 +289,9 @@ class Quat:
         self.c = self.c*other
         self.d = self.d*other
         return self
+    
+    def __imul__(self, other):
+        return self.__rmul__(other)
 
     def __add__(self, other):
         new_a = self.a + other.a
@@ -291,6 +306,11 @@ class Quat:
         self.b = self.b/norm
         self.c = self.c/norm
         self.d = self.d/norm
+
+    def con(self):
+        self.b = -self.b
+        self.c = -self.c
+        self.d = -self.d
 
     def inv(self):
         norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c + self.d*self.d)
@@ -396,13 +416,26 @@ class Quat:
     def __str__(self):
         return str([self.a, [self.b, self.c, self.d]])
 
-
-
-
-if __name__ == "__main__":
+def main():
+    DEG2RAD = 0.01745329251
     while(1):
-        gimbal_y, gimbal_p = input("Enter gimbal **yaw pitch**")
-        aim_y, aim_p = input("Enter aim **yaw pitch**")
-        system_y, system_p, system_r = input("Enter system **yaw pitch roll**")
+        gimbal_y, gimbal_p = input("Enter gimbal **yaw pitch**").split()
+        aim_y, aim_p = input("Enter aim **yaw pitch**").split()
+        system_y, system_p, system_r = input("Enter system **yaw pitch roll**").split()
+        gimbal_y = float(gimbal_y)
+        gimbal_p = float(gimbal_p)
+        aim_y = float(aim_y)
+        aim_p = float(aim_p)
+        system_y = float(system_y)
+        system_p = float(system_p)
+        system_r = float(system_r)
+
+        gimbal_y *= DEG2RAD
+        gimbal_p *= DEG2RAD
+        aim_y *= DEG2RAD
+        aim_p *= DEG2RAD
+        system_y *= DEG2RAD
+        system_p *= DEG2RAD
+        system_r *= DEG2RAD
 
         test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
