@@ -103,26 +103,6 @@ def plot(sy, sp, sr, phi, theta):
     ax.scatter(VIEW_SIZE*aim_final.item(0), VIEW_SIZE*aim_final.item(1), VIEW_SIZE*aim_final.item(2), marker = 'x')
 
     # Plot aim vector from quaternion
-    aimQ = euler2q(phi, theta, 0)
-    aimQd = euler2q(phi + 0.2, theta, 0)
-    sysQ = euler2q(sy, sp, sr)
-    oriQ = [0,0,1,0]
-    sysQinv = invQ(sysQ)
-    aimQinv = invQ(aimQ)
-    sysQcon = conQ(sysQ)
-    aimQcon = conQ(aimQ)
-    aimQdcon = conQ(aimQd)
-    finQ = qMult(qMult(qMult(qMult(sysQcon, aimQ), oriQ), aimQcon), sysQ)
-    finQd = qMult(qMult(qMult(qMult(sysQcon, aimQd), oriQ), aimQdcon), sysQ)
-    rotQ = qMult(sysQinv, aimQ)
-    
-
-    normF = np.sqrt(finQ[1]*finQ[1] + finQ[2]*finQ[2] + finQ[3]*finQ[3])
-    normR = np.sqrt(rotQ[1]*rotQ[1] + rotQ[2]*rotQ[2] + rotQ[3]*rotQ[3])
-
-    print("final: ", finQ)
-    print("rot: ", rotQ)
-
 
     q_start = Quat(0,1,0,-1)
     q_end = Quat(0,-1,1,0)
@@ -141,41 +121,6 @@ def plot(sy, sp, sr, phi, theta):
         ax.quiver(0,0,0,
         VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
 
-
-    # Gränsvärden: när q1q2 + q0q3 beräknas yaw och roll annorlunda. Detta syns nedan:
-    # Detta är fel, det blir annorlunda för vårt system. Se länken nedan för hur de kom fram till gränsvärdena.
-    pole = rotQ[1]*rotQ[1] + rotQ[2]*rotQ[2]
-    sgn = rotQ[0]*rotQ[1] + rotQ[2]*rotQ[3]
-    print(pole)
-    if(abs(pole - 0.5) < 0.08):
-        print("Degenerate")
-        # North pole
-        if(sgn > 0):
-            yaw = 2*np.arctan2(rotQ[2], rotQ[0])
-            roll = 0
-        # South pole
-        elif(sgn < 0):        
-            yaw = 2*np.arctan2(rotQ[2], rotQ[0])
-            roll = 0
-    # Mer info: http://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToEuler/
-    # Pitch och roll är ombytta pga vår X-Y-invertering
-    else:
-        roll = np.arcsin(2*(rotQ[0]*rotQ[2] - rotQ[3]*rotQ[1]))
-        yaw = -np.arctan2(2*(rotQ[0]*rotQ[3] + rotQ[1]*rotQ[2]), 1 - 2*(rotQ[2]*rotQ[2] + rotQ[3]*rotQ[3]))
-    
-    pitch = np.arctan2(2*(rotQ[0]*rotQ[1] + rotQ[2]*rotQ[3]), 1 - 2*(rotQ[1]*rotQ[1] + rotQ[2]*rotQ[2]))
-    
-    print("roll: ", np.rad2deg(roll), ", pitch: ", np.rad2deg(pitch), ", yaw: ", np.rad2deg(yaw))
-    """
-    ax.quiver(0, 0, 0,
-    VIEW_SIZE*(finQ[1]/normF), VIEW_SIZE*(finQ[2]/normF), VIEW_SIZE*(finQ[3]/normF), color="g")
-    ax.quiver(0, 0, 0,
-    VIEW_SIZE*(finQd[1]/normF), VIEW_SIZE*(finQd[2]/normF), VIEW_SIZE*(finQd[3]/normF), color="b")
-    ax.quiver(0, 0, 0,
-    2*VIEW_SIZE*(rotQ[1]/normR), 2*VIEW_SIZE*(rotQ[2]/normR), 2*VIEW_SIZE*(rotQ[3]/normR), color="r")
-    ax.quiver(0, 0, 0,
-    -2*VIEW_SIZE*(rotQ[1]/normR), -2*VIEW_SIZE*(rotQ[2]/normR), -2*VIEW_SIZE*(rotQ[3]/normR), color="r")
-    """
     plt.show()
     
 
@@ -263,56 +208,37 @@ def rotatePoint(p, rotMatrix):
 def sysNormal(rotMatrix):
     return rotMatrix.dot(np.array([[0], [0], [1]]))
 
-def euler2q(y, p, r):
-    cy = np.cos(y/2)
-    sy = np.sin(y/2)
-    cp = np.cos(p/2)
-    sp = np.sin(p/2)
-    cr = np.cos(r/2)
-    sr = np.sin(r/2)
-    qw = cy*cp*cr + sy*sp*sr
-    qx = cy*sp*cr + sy*cp*sr
-    qy = cy*cp*sr - sy*sp*cr
-    qz = cy*sp*sr - sy*cp*cr
-    return [qw, qx, qy, qz]
+def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
+    theta = np.arctan2(q.y, q.x)
+    phi = np.arcsin(-q.z)
+    scaleH = 1 + (1/(hFOV - (np.pi / 2)))*(phi - hFOV)
+    scaleW = 1 + (1/(wFOV - (np.pi / 2)))*(phi - wFOV)
+    return (imgW/2 + (imgW/2)*np.sin(theta)*(scaleW), imgH/2 - (imgH/2)*np.cos(theta)*(scaleH))
 
-def invQ(q):
-    norm = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]
-    return [q[0]/norm, -q[1]/norm, -q[2]/norm, -q[3]/norm]
+def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
+    cam_y = 0
+    cam_p = np.pi / 2
 
-def conQ(q):
-    return [q[0], -q[1], -q[2], -q[3]]
+    oriQ = Quat(0, 0, 1, 0)
 
-def qMult(q1, q2):
-    return [
-        q1[0]*q2[0] - q1[1]*q2[1] - q1[2]*q2[2] - q1[3]*q2[3],
-        q1[1]*q2[0] + q1[0]*q2[1] - q1[3]*q2[2] + q1[2]*q2[3],
-        q1[2]*q2[0] + q1[3]*q2[1] + q1[0]*q2[2] - q1[1]*q2[3],
-        q1[3]*q2[0] - q1[2]*q2[1] + q1[1]*q2[2] + q1[0]*q2[3]
-    ]
+    camQ = Quat(cam_y, cam_p, 0)
+    camQ.inv()
+    gimQ = Quat(gimbal_y, gimbal_p, 0)
+    gimQ.inv()
+    sysQ = Quat(sys_y, sys_p, sys_r)
+    sysQ.inv()
+    aimQ = Quat(aim_y, aim_p, 0)
+    
+    # Might need to normalize??
 
-def test_crop(phi, theta):
-    phi = np.deg2rad(phi)
-    theta = np.deg2rad(theta)
-    a = np.sin(phi) * np.cos(theta)
-    b = np.cos(phi) * np.cos(theta)
-    c = np.sin(theta)
+    rotQ = camQ * gimQ * sysQ * aimQ
+    rotQinv = rotQ.inv()
 
-    # Med skalning 1-t
-    a2b2 = a*a + b*b
-    if(c == np.sqrt(a2b2) or c == -np.sqrt(a2b2)):
-        t = (np.sqrt(a2b2) + 2*a2b2)/(2*a2b2)
-    else:
-        t = (np.sqrt(a2b2) + a2b2 - c*c - c)/(a2b2 - c*c)
-
-    # Med skalning t
-    if(c == np.sqrt(a2b2) or c == -np.sqrt(a2b2)):
-        t = 1/(2*np.sqrt(a2b2))
-    else:
-        t = (c + np.sqrt(a2b2))/(a2b2 - c*c)
-
-    print("a = ", a, "b = ", b, "c = ", c, "t = ", t)
-    print("x = ", a*t, "\ny = ", -b*t)
+    finQ = rotQ * oriQ * rotQinv
+    crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
+    print("Gimbal yaw, pitch:       ", gimbal_y, ",", gimbal_p)
+    print("Aim yaw, pitch           ", aim_y, ",", aim_p)
+    print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
 
 
 class Quat:
@@ -322,6 +248,19 @@ class Quat:
         self.c = c
         self.d = d
         self.vec = [b,c,d]
+
+    def __init__(self, yaw, pitch, roll):
+        cy = np.cos(yaw/2)
+        sy = np.sin(yaw/2)
+        cp = np.cos(pitch/2)
+        sp = np.sin(pitch/2)
+        cr = np.cos(roll/2)
+        sr = np.sin(roll/2)
+        
+        self.a = cy*cp*cr + sy*sp*sr
+        self.b = cy*sp*cr + sy*cp*sr
+        self.c = cy*cp*sr - sy*sp*cr
+        self.d = cy*sp*sr - sy*cp*cr
     
     def __mul__(self, other):
         new_a = self.a*other.a - self.b*other.b - self.c*other.c - self.d*other.d
