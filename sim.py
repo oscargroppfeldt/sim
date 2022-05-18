@@ -9,7 +9,7 @@ import random
 SIZE = 80
 VIEW_SIZE = 50
 
-def plot(sy, sp, sr, phi, theta):
+def plot(sy, sp, sr, phi, theta, gimQ, camQ, sysQ, aimQ):
     sy = sy * np.pi/180
     sp = sp * np.pi/180
     sr = sr * np.pi/180
@@ -104,22 +104,37 @@ def plot(sy, sp, sr, phi, theta):
 
     # Plot aim vector from quaternion
 
-    q_start = Quat(0,1,0,-1)
-    q_end = Quat(0,-1,1,0)
+    
     lst = []
-    q_start.norm()
-    q_end.norm()
-    steps = q_start.slerpSteps(q_end)
+    gimQ.norm()
+    camQ.norm()
+    steps = 15
     for t in np.linspace(0,1,steps):
-        lst.append(q_start.newSlerp(q_end, t))
+        lst.append(gimQ.newSlerp(camQ, t))
 
-    lst.append(q_end)
-    lst.insert(0, q_start)
+    lst.append(camQ)
+    lst.insert(0, gimQ)
 
     for element in lst:
         vec = [element.b,element.c,element.d]
         ax.quiver(0,0,0,
         VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
+
+    newQ = gimQ * camQ
+    sysQ.norm()
+    steps = 15
+
+    for t in np.linspace(0,1,steps):
+        lst.append(newQ.newSlerp(sysQ, t))
+
+    lst.append(sysQ)
+    lst.insert(0, newQ)
+
+    for element in lst:
+        vec = [element.b,element.c,element.d]
+        ax.quiver(0,0,0,
+        VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
+
 
     plt.show()
     
