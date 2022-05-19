@@ -229,6 +229,12 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     # Might need to normalize??
     """
     (S*G)' * A
+    Ogges idé
+
+    difQ = sysQ * gimQ * aimQ
+
+
+
     """
     rotQ = sysQ * gimQ_sys * aimQ
 
@@ -245,6 +251,40 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
     print("Cropping point x, y:     ", crop[0], crop[1])
 
+def gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
+    oriQ = Quat(0, 0, 0, -1)
+
+    gimQ = Quat()
+    gimQ.fromEuler(gimbal_y, gimbal_p, 0)
+    sysQ = Quat()
+    sysQ.fromEuler(sys_y, sys_p, sys_r)
+    sysQ.con()
+    aimQ = Quat()
+    aimQ.fromEuler(aim_y, aim_p, 0)
+
+    rotQ_gim = sysQ * gimQ
+    rotQ_aim = sysQ * aimQ
+
+    finQ_gim = rotQ_gim * oriQ
+    rotQ_gim.con()
+    finQ_gim = finQ_gim * rotQ_gim
+
+    finQ_aim = rotQ_aim * oriQ
+    rotQ_aim.con()
+    finQ_aim = finQ_aim * rotQ_aim
+
+    crop_gim = get_cropping_point(finQ_gim, 0.8, 0.6, 640, 480)
+    crop_aim = get_cropping_point(finQ_aim, 0.8, 0.6, 640, 480)
+
+    crop_fin = (320 - (crop_gim[0] - crop_aim[0]), 240 - (crop_gim[1] - crop_aim[1]))
+
+    print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
+    print("Aim yaw, pitch           ", aim_y, aim_p)
+    print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
+    print("Cropping point gim x, y:     ", crop_gim[0], crop_gim[1])
+    print("Cropping point aim x, y:     ", crop_aim[0], crop_aim[1])
+    print("Cropping point fin x, y:     ", crop_fin[0], crop_fin[1])
+    
 
 class Quat:
     def __init__(self, a = 1, b = 0, c = 0, d = 0):
@@ -442,6 +482,7 @@ def main():
         system_p *= DEG2RAD
         system_r *= DEG2RAD
 
-        test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
+        #test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
+        gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
 
 main()
