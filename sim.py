@@ -203,16 +203,26 @@ def rotatePoint(p, rotMatrix):
 def sysNormal(rotMatrix):
     return rotMatrix.dot(np.array([[0], [0], [1]]))
 
+def get_crop(q, FOV, imgW, imgH):
+    theta = np.arctan2(q.b, q.d)
+    print(theta)
+    phi = np.arccos(q.c)
+    print(phi)
+    r = (imgW / 2) * (phi / FOV)
+    print(r)
+    return ((imgW/2) + r*(np.sin(theta)), (imgH/2) - r*(np.cos(theta)))
+
+
 def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
-    theta = np.arctan2(q.b, q.c)
-    phi = np.arcsin(-q.d)
+    theta = np.arctan2(q.b, q.d)
+    phi = np.arcsin(q.c)
     scaleH = 1 + (1/(hFOV - (np.pi / 2)))*(phi - hFOV)
     scaleW = 1 + (1/(wFOV - (np.pi / 2)))*(phi - wFOV)
     return (imgW/2 + (imgW/2)*np.sin(theta)*(scaleW), imgH/2 - (imgH/2)*np.cos(theta)*(scaleH))
 
 def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
 
-    oriQ = Quat(0, 0, 0, -1)
+    oriQ = Quat(0, 0, 1, 0)
 
     gimQ = Quat()
     gimQ.fromEuler(gimbal_y, gimbal_p, 0)
@@ -261,7 +271,7 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     print("Cropping point x, y:     ", crop[0], crop[1])
 
 def gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
-    oriQ = Quat(0, 0, 0, -1)
+    oriQ = Quat(0, 0, 1, 0)
 
     gimQ = Quat()
     gimQ.fromEuler(gimbal_y, gimbal_p, 0)
@@ -270,9 +280,12 @@ def gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     sysQ.con()
     aimQ = Quat()
     aimQ.fromEuler(aim_y, aim_p, 0)
+    aimQ_prim = Quat()
+    aimQ_prim.fromEuler(aim_y + 0.001, aim_p, 0)
 
     rotQ_gim = sysQ * gimQ
     rotQ_aim = sysQ * aimQ
+    rotQ_aim_prim = sysQ * aimQ_prim
 
     finQ_gim = rotQ_gim * oriQ
     rotQ_gim.con()
@@ -282,17 +295,24 @@ def gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     rotQ_aim.con()
     finQ_aim = finQ_aim * rotQ_aim
 
-    crop_gim = get_cropping_point(finQ_gim, 0.8, 0.6, 640, 480)
-    crop_aim = get_cropping_point(finQ_aim, 0.8, 0.6, 640, 480)
+    finQ_aim_prim = rotQ_aim_prim * oriQ
+    rotQ_aim_prim.con()
+    finQ_aim_prim = finQ_aim_prim * rotQ_aim_prim
+
+    crop_gim = get_crop(finQ_gim, 0.8, 640, 480)
+    crop_aim = get_crop(finQ_aim, 0.8, 640, 480)
+    crop_aim_prim = get_crop(finQ_aim_prim, 0.8, 640, 480)
+    crop_angle = np.arctan2((crop_aim_prim[1] - crop_aim[1]), (crop_aim_prim[0] - crop_aim[0]))
 
     crop_fin = (320 - (crop_gim[0] - crop_aim[0]), 240 - (crop_gim[1] - crop_aim[1]))
 
-    print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
-    print("Aim yaw, pitch           ", aim_y, aim_p)
-    print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
+    print("Gimbal yaw, pitch:           ", gimbal_y, gimbal_p)
+    print("Aim yaw, pitch               ", aim_y, aim_p)
+    print("System yaw, pitch, roll:     ", sys_y, sys_p, sys_r)
     print("Cropping point gim x, y:     ", crop_gim[0], crop_gim[1])
     print("Cropping point aim x, y:     ", crop_aim[0], crop_aim[1])
     print("Cropping point fin x, y:     ", crop_fin[0], crop_fin[1])
+    print("Cropping angle degrees:      ", crop_angle * 57.29577951)
     
 
 class Quat:
