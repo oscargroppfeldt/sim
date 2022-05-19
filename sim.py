@@ -9,7 +9,7 @@ import random
 SIZE = 80
 VIEW_SIZE = 50
 
-def plot(sy, sp, sr, phi, theta, gimQ, camQ, sysQ, aimQ):
+def plot(sy, sp, sr, phi, theta, gimQ, sysQ, aimQ):
     sy = sy * np.pi/180
     sp = sp * np.pi/180
     sr = sr * np.pi/180
@@ -107,28 +107,8 @@ def plot(sy, sp, sr, phi, theta, gimQ, camQ, sysQ, aimQ):
     
     lst = []
     gimQ.norm()
-    camQ.norm()
-    steps = 15
-    for t in np.linspace(0,1,steps):
-        lst.append(gimQ.newSlerp(camQ, t))
-
-    lst.append(camQ)
-    lst.insert(0, gimQ)
-
-    for element in lst:
-        vec = [element.b,element.c,element.d]
-        ax.quiver(0,0,0,
-        VIEW_SIZE*vec[0], VIEW_SIZE*vec[1], VIEW_SIZE*vec[2], color='r')
-
-    newQ = gimQ * camQ
-    sysQ.norm()
-    steps = 15
-
-    for t in np.linspace(0,1,steps):
-        lst.append(newQ.newSlerp(sysQ, t))
 
     lst.append(sysQ)
-    lst.insert(0, newQ)
 
     for element in lst:
         vec = [element.b,element.c,element.d]
@@ -231,34 +211,26 @@ def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
     return (imgW/2 + (imgW/2)*np.sin(theta)*(scaleW), imgH/2 - (imgH/2)*np.cos(theta)*(scaleH))
 
 def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
-    cam_y = 0
-    cam_p = np.pi / 2
 
-    oriQ = Quat(0, 0, 1, 0)
+    oriQ = Quat(0, 0, 0, -1)
 
-    camQ = Quat()
-    camQ.fromEuler(cam_y, cam_p, 0)
-    camQ.norm()
-    camQ.con()
     gimQ = Quat()
     gimQ.fromEuler(gimbal_y, gimbal_p, 0)
-    gimQ.norm()
-    gimQ.con()
     sysQ = Quat()
     sysQ.fromEuler(sys_y, sys_p, sys_r)
-    sysQ.norm()
-    sysQ.con()
     aimQ = Quat()
     aimQ.fromEuler(aim_y, aim_p, 0)
-    aimQ.norm()
-    
+
+    gimQ_sys = sysQ * gimQ
+    sysQ.con()
+    gimQ_sys = gimQ_sys * sysQ
+    gimQ_sys.con()
+    sysQ.con()
     # Might need to normalize??
     """
-    g s c a
-    c g s a
-    g c s a
+    (S*G)' * A
     """
-    rotQ = gimQ * camQ * sysQ * aimQ
+    rotQ = sysQ * gimQ_sys * aimQ
 
     finQ = rotQ * oriQ
     rotQ.con()
@@ -266,6 +238,7 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
 
     finQ *= 1 / (finQ.vecNorm())
     crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
+    print(gimQ)
     print("rotQ length:             ", rotQ.normVal())
     print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
     print("Aim yaw, pitch           ", aim_y, aim_p)
@@ -322,6 +295,13 @@ class Quat:
         new_b = self.b + other.b
         new_c = self.c + other.c
         new_d = self.d + other.d
+        return Quat(new_a, new_b, new_c, new_d)
+
+    def __sub__(self, other):
+        new_a = self.a - other.a
+        new_b = self.b - other.b
+        new_c = self.c - other.c
+        new_d = self.d - other.d
         return Quat(new_a, new_b, new_c, new_d)
 
     def norm(self):
