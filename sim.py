@@ -236,6 +236,15 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
 
 
     """
+    """
+    Tanken:
+    rotQ = sysQ * gimQ * aimQ
+    finQ = rotQ * oriQ * rotQ.con()
+    diffQ = finQ.con() * aimQ
+    resQ = diffQ * oriQ
+    .... tror det var så jag tänkte
+    
+    """
     rotQ = sysQ * gimQ_sys * aimQ
 
     finQ = rotQ * oriQ
