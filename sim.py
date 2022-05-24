@@ -203,6 +203,25 @@ def rotatePoint(p, rotMatrix):
 def sysNormal(rotMatrix):
     return rotMatrix.dot(np.array([[0], [0], [1]]))
 
+def scalar(Q1, Q2):
+    return (Q1.b*Q2.b) + (Q1.c*Q2.c) + (Q1.d*Q2.d)
+
+def projection(Q1, Q2):
+    retQ = Quat(0, 0, 0, 0)
+    retQ.fromQuat(Q2)
+    scale = scalar(Q1, Q2) / (Q2.vecNorm() ** 2)
+    return scale * retQ
+
+def cross(Q1, Q2):
+    return Quat(0, (Q1.c*Q2.d) - (Q1.d*Q2.c), (Q1.d*Q2.b) - (Q1.b*Q2.d), (Q1.b*Q2.c) - (Q1.c*Q2.b))
+
+def vecAngle(Q1, Q2):
+    if(scalar(Q1, Q2) / (Q1.vecNorm() * Q2.vecNorm()) > 1):
+        return np.arccos(1)
+    if(scalar(Q1, Q2) / (Q1.vecNorm() * Q2.vecNorm()) < -1):
+        return np.arccos(-1)
+    return np.arccos(scalar(Q1, Q2) / (Q1.vecNorm() * Q2.vecNorm()))
+
 def get_crop(q, FOV, imgW, imgH):
     theta = np.arctan2(q.b, q.d)
     print(theta)
@@ -212,42 +231,43 @@ def get_crop(q, FOV, imgW, imgH):
     print(r)
     return ((imgW/2) + r*(np.sin(theta)), (imgH/2) - r*(np.cos(theta)))
 
-
-def get_cropping_point(q, wFOV, hFOV, imgW, imgH):
-    theta = np.arctan2(q.b, q.d)
-    phi = np.arcsin(q.c)
-    scaleH = 1 + (1/(hFOV - (np.pi / 2)))*(phi - hFOV)
-    scaleW = 1 + (1/(wFOV - (np.pi / 2)))*(phi - wFOV)
-    return (imgW/2 + (imgW/2)*np.sin(theta)*(scaleW), imgH/2 - (imgH/2)*np.cos(theta)*(scaleH))
+def get_cropping_point(camQ_x, camQ_y, camQ_z, aimQ, FOV, imgW, imgH):
+    # Beskrivning i carls bok
+    theta = vecAngle(camQ_y, aimQ)
+    r = (imgW / 2) * (theta / (FOV / 2))
+    print("Theta =", theta)
+    if(aimQ == camQ_y):
+        phi = 0
+    else:
+        aimQ_proj_on_camQ_xz = aimQ - projection(aimQ, camQ_y)
+        phi = vecAngle(aimQ_proj_on_camQ_xz, camQ_z)
+        phi_sign = np.sign(scalar(aimQ, camQ_x))
+        if(phi_sign == 0):
+            phi_sign = 1
+        print("Phi =", phi)
+        print("Sign: ", phi_sign)
+        phi *= phi_sign
+    return ((imgW/2) + r*(np.sin(phi)), (imgH/2) - r*(np.cos(phi)))
 
 def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
-
-    oriQ = Quat(0, 0, 1, 0)
+    oriQ_x = Quat(0, 1, 0, 0)
+    oriQ_y = Quat(0, 0, 1, 0)
+    oriQ_z = Quat(0, 0, 0, 1)
 
     gimQ = Quat()
     gimQ.fromEuler(gimbal_y, gimbal_p, 0)
+    gimQ.norm()
     sysQ = Quat()
     sysQ.fromEuler(sys_y, sys_p, sys_r)
+    sysQ.norm()
     aimQ = Quat()
     aimQ.fromEuler(aim_y, aim_p, 0)
+    aimQ_prim = Quat()
+    aimQ_prim.fromEuler(aim_y + 0.05, aim_p, 0)
 
-    gimQ_sys = sysQ * gimQ
-    sysQ.con()
-    gimQ_sys = gimQ_sys * sysQ
-    gimQ_sys.con()
-    sysQ.con()
-    # Might need to normalize??
     """
-    (S*G)' * A
     Ogges idé
 
-    difQ = sysQ * gimQ * aimQ
-
-
-
-    """
-    """
-    Tanken:
     rotQ = sysQ * gimQ * aimQ
     finQ = rotQ * oriQ * rotQ.con()
     diffQ = finQ.con() * aimQ
@@ -255,21 +275,110 @@ def test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r
     .... tror det var så jag tänkte
     
     """
-    rotQ = sysQ * gimQ_sys * aimQ
+    # First off calculate the gimbal's original x y and z vectors in global frame
+    # (before it has rotated to where it is)
+    dirQ_x = sysQ * oriQ_x
+    dirQ_y = sysQ * oriQ_y
+    dirQ_z = sysQ * oriQ_z
+    sysQ.con()
+    dirQ_x = dirQ_x * sysQ
+    dirQ_y = dirQ_y * sysQ
+    dirQ_z = dirQ_z * sysQ
 
-    finQ = rotQ * oriQ
-    rotQ.con()
-    finQ = finQ * rotQ
+    # Then calculate where in the global frame the gimbal's y-vector is pointing
+    finQ_gim = gimQ * oriQ_y
+    gimQ.con()
+    finQ_gim = finQ_gim * gimQ
+    
+    # And the aim vector
+    finQ_aim = aimQ * oriQ_y
+    aimQ.con()
+    finQ_aim = finQ_aim * aimQ
 
-    finQ *= 1 / (finQ.vecNorm())
-    crop = get_cropping_point(finQ, 0.8, 0.6, 640, 480)
-    print(gimQ)
-    print("rotQ length:             ", rotQ.normVal())
+    # Calculate how to rotate the gimbal's original x y and z vectors to where it is pointing
+    dirQ_y.norm(only_vec = True)
+    finQ_gim.norm(only_vec = True)
+    tempQ = dirQ_y + finQ_gim
+    tempQ.norm(only_vec = True)
+    dir_to_gimQ = cross(tempQ, finQ_gim)
+    dir_to_gimQ.a = scalar(tempQ, finQ_gim)
+
+    # Rotate the gimbal (this is the camera's orientation in the global frame)
+    finQ_cam_x = dir_to_gimQ * dirQ_x
+    finQ_cam_y = dir_to_gimQ * dirQ_y
+    finQ_cam_z = dir_to_gimQ * dirQ_z
+    dir_to_gimQ.con()
+    finQ_cam_x = finQ_cam_x * dir_to_gimQ
+    finQ_cam_y = finQ_cam_y * dir_to_gimQ
+    finQ_cam_z = finQ_cam_z * dir_to_gimQ
+
+    # If all is right, finQ_cam_y should be the same as finQ_gim (It is)
+
+    # Now calculate the polar angles of the vector between the tip of
+    # the camera y-vector and the wanted aim vector (as seen from behind the camera)
+
+    crop = get_cropping_point(finQ_cam_x, finQ_cam_y, finQ_cam_z, finQ_aim, 1.57, 640, 480)
+
+    crop_angle = np.arcsin(finQ_cam_x.d)
+
+
+    """
+    This algorithm is wrong. 
+    Den står beskriven i calles bok
+    rotQ_aim = sysQ * aimQ
+    rotQ_aim_prim = sysQ * aimQ_prim
+    rotQ_gim = sysQ * gimQ
+
+    finQ_aim = rotQ_aim * oriQ_y
+    finQ_aim_prim = rotQ_aim_prim * oriQ_y
+    rotQ_aim.con()
+    rotQ_aim_prim.con()
+    finQ_aim = finQ_aim * rotQ_aim
+    finQ_aim_prim = finQ_aim_prim * rotQ_aim_prim
+
+    finQ_gim_x = rotQ_gim * oriQ_x
+    finQ_gim_y = rotQ_gim * oriQ_y
+    finQ_gim_z = rotQ_gim * oriQ_z
+    rotQ_gim.con()
+    finQ_gim_x = finQ_gim_x * rotQ_gim
+    finQ_gim_y = finQ_gim_y * rotQ_gim
+    finQ_gim_z = finQ_gim_z * rotQ_gim
+
+    # Normalize everything
+    finQ_aim.norm()
+    finQ_aim_prim.norm()
+    finQ_gim_x.norm()
+    finQ_gim_y.norm()
+    finQ_gim_z.norm()
+
+    crop = get_cropping_point(finQ_aim, finQ_gim_x, finQ_gim_y, finQ_gim_z, 0.5, 640, 480)
+    crop_prim = get_cropping_point(finQ_aim_prim, finQ_gim_x, finQ_gim_y, finQ_gim_z, 0.5, 640, 480)
+    
+
+    crop_angle = np.arctan2(crop_prim[1] - crop[1], crop_prim[0] - crop[0])
+    """
+    
     print("Gimbal yaw, pitch:       ", gimbal_y, gimbal_p)
     print("Aim yaw, pitch           ", aim_y, aim_p)
     print("System yaw, pitch, roll: ", sys_y, sys_p, sys_r)
+    print("Gimbal y-vector:         ", finQ_gim)
+    print("Gimbal x-vector          ", finQ_cam_x)
+    print("Camera y-vector:         ", finQ_cam_y)
+    print("Camera z-vector:         ", finQ_cam_z)
+    print("Aim vector:              ", finQ_aim)
+    
+    print("Crop angle:              ", crop_angle)
+    print("Cropping point x, y:     ", crop[0], ",", crop[1])
+    """
+    print("AimQ:                    ", finQ_aim)
+    print("AimQ_prim:               ", finQ_aim_prim)
+    print("GimQ_x:                  ", finQ_gim_x)
+    print("GimQ_y:                  ", finQ_gim_y)
+    print("GimQ_z:                  ", finQ_gim_z)
     print("Cropping point x, y:     ", crop[0], crop[1])
-
+    print("Cropping point prim:     ", crop_prim[0], crop_prim[1])
+    print("Crop angle:              ", crop_angle)
+    """
 def gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, sys_y, sys_p, sys_r):
     oriQ = Quat(0, 0, 1, 0)
 
@@ -336,6 +445,15 @@ class Quat:
         self.c = cy*cp*sr - sy*sp*cr
         self.d = cy*sp*sr - sy*cp*cr
     
+    def fromQuat(self, other):
+        self.a = other.a
+        self.b = other.b
+        self.c = other.c
+        self.d = other.d
+
+    def __eq__(self, other):
+        return(self.a == other.a and self.b == other.b and self.c == other.c and self.d == other.d)
+    
     def __mul__(self, other):
         """
         w*q.w - x*q.x - y*q.y - z*q.z,
@@ -373,12 +491,18 @@ class Quat:
         new_d = self.d - other.d
         return Quat(new_a, new_b, new_c, new_d)
 
-    def norm(self):
-        norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c+ self.d*self.d)
-        self.a = self.a/norm
-        self.b = self.b/norm
-        self.c = self.c/norm
-        self.d = self.d/norm
+    def norm(self, only_vec = False):
+        if(not only_vec):
+            norm = np.sqrt(self.a*self.a + self.b*self.b + self.c*self.c+ self.d*self.d)
+            self.a = self.a/norm
+            self.b = self.b/norm
+            self.c = self.c/norm
+            self.d = self.d/norm
+        else:
+            norm = np.sqrt(self.b*self.b + self.c*self.c+ self.d*self.d)
+            self.b = self.b/norm
+            self.c = self.c/norm
+            self.d = self.d/norm
 
     def con(self):
         self.b = -self.b
@@ -442,6 +566,9 @@ class Quat:
 
     def vecNorm(self):
         return np.sqrt(self.b*self.b + self.c*self.c + self.d*self.d)
+
+    def vecMag(self):
+        return self.b*self.b + self.c*self.c + self.d*self.d
 
     def normVal(self):
         return np.sqrt(self.a*self.a+self.b*self.b+self.c*self.c+self.d*self.d)
@@ -511,7 +638,7 @@ def main():
         system_p *= DEG2RAD
         system_r *= DEG2RAD
 
-        #test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
-        gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
+        test_gimbal_correction(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
+        #gimbal_correction_diff(gimbal_y, gimbal_p, aim_y, aim_p, system_y, system_p, system_r)
 
 main()
